@@ -1,6 +1,6 @@
 {
   "name": "zod-form",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Build forms faster!",
   "module": "lib/index.mjs",
   "main": "lib/index.cjs",
@@ -16,15 +16,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/watershed/react-ts-form.git"
+    "url": "git+https://github.com/watershed-climate/react-ts-form.git"
   },
   "type": "module",
   "author": "Isaac Way",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/watershed/react-ts-form/issues"
+    "url": "https://github.com/watershed-climate/react-ts-form/issues"
   },
-  "homepage": "https://github.com/watershed/react-ts-form#readme",
+  "homepage": "https://github.com/watershed-climate/react-ts-form#readme",
   "devDependencies": {
     "@hookform/resolvers": "^2.9.10",
     "@rollup/plugin-terser": "^0.2.1",
