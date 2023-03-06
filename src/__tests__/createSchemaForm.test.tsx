@@ -599,7 +599,7 @@ describe("createSchemaForm", () => {
     const submitPromise = new Promise<void>((resolve) => {
       submitPromiseResolve = resolve;
     })
-    let submitting =false;
+    let submitting = false;
     function Component() {
       const form = useForm({
         defaultValues: {
@@ -613,7 +613,7 @@ describe("createSchemaForm", () => {
           schema={z.object({
             v: z.string(),
           })}
-          onSubmit={() => {return submitPromise}}
+          onSubmit={() => { return submitPromise }}
           props={{
             v: {
               testId: testId,
@@ -1123,5 +1123,85 @@ describe("createSchemaForm", () => {
 
     expect(screen.queryByText("one")).toBeInTheDocument();
     expect(screen.queryByText("two")).toBeInTheDocument();
+  });
+  it("should render the correct components for a nested object schema if unmaped", async () => {
+    const NumberSchema = createUniqueFieldSchema(z.number(), "number");
+    const mockOnSubmit = jest.fn();
+
+    function TextField() {
+      const {
+        error,
+      } = useTsController<string>();
+      return <><div>text</div><div data-testid="error">{error?.errorMessage}</div></>;
+    }
+
+    function NumberField() {
+      return <div>number</div>;
+    }
+
+    const mapping = [
+      [z.string(), TextField],
+      [NumberSchema, NumberField],
+    ] as const;
+
+    const Form = createTsForm(mapping);
+
+    const schema = z.object({
+      nestedField: z.object({
+        name: z.string(),
+        age: NumberSchema,
+      })
+    });
+    const defaultValues = { nestedField: { name: 'name', age: 9 } };
+    // TODO: test submit rolls up the values correctly
+    // TODO: test validation
+    render(<Form schema={schema} onSubmit={mockOnSubmit} defaultValues={defaultValues} renderAfter={() => <button type="submit">submit</button>}/>);
+    const button = screen.getByText("submit");
+    await userEvent.click(button);
+
+    const textNodes = screen.queryByText("text");
+    expect(textNodes).toBeInTheDocument();
+    const numberNodes = screen.queryByText("number");
+    expect(numberNodes).toBeInTheDocument();
+    expect(screen.queryByTestId('error')).toHaveTextContent('');
+    expect(mockOnSubmit).toHaveBeenCalledWith(defaultValues);
+  });
+  xit("should render two copies of an object schema if in an unmapped array schema", () => {
+    const NumberSchema = createUniqueFieldSchema(z.number(), "number");
+    const mockOnSubmit = jest.fn();
+
+    function TextField() {
+      return <div>text</div>;
+    }
+
+    function NumberField() {
+      return <div>number</div>;
+    }
+
+    const mapping = [
+      [z.string(), TextField],
+      [NumberSchema, NumberField],
+    ] as const;
+
+    const Form = createTsForm(mapping);
+
+    const schema = z.object({
+      arrayField: z.object({
+        name: z.string(),
+        age: NumberSchema,
+      }).array()
+    });
+    // TODO: test submit rolls up the values correctly
+    // TODO: test validation
+    const defaultValues = { arrayField: [{ name: 'name', age: 9 }, { name: 'name2', age: 10 }] };
+    render(<Form schema={schema} onSubmit={mockOnSubmit} defaultValues={defaultValues} renderAfter={() => <button type="submit">submit</button>}/>);
+
+    const textNodes = screen.queryAllByText("text");
+    expect(textNodes).toBeInTheDocument();
+    expect(textNodes).toHaveLength(2);
+    const numberNodes = screen.queryAllByText("number");
+    expect(numberNodes).toBeInTheDocument();
+    expect(numberNodes).toHaveLength(2);
+    expect(mockOnSubmit).toHaveBeenCalledWith(defaultValues);
   });
 });
