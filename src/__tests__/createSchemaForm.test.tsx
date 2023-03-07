@@ -1128,34 +1128,46 @@ describe("createSchemaForm", () => {
     const NumberSchema = createUniqueFieldSchema(z.number(), "number");
     const mockOnSubmit = jest.fn();
 
-    function TextField() {
+    function TextField({} : {b : '1'}) {
       const {
         error,
       } = useTsController<string>();
       return <><div>text</div><div data-testid="error">{error?.errorMessage}</div></>;
     }
 
-    function NumberField() {
+    function NumberField({} : {a :1}) {
       return <div>number</div>;
     }
+
+    function BooleanField({} : {c :boolean}) {
+      return <div>boolean</div>;
+    }
+
+    const objectSchema = z.object({
+      text: z.string(),
+      age: NumberSchema,
+    });
+    const objectSchema2 = z.object({
+      bool: z.boolean(),
+    });
 
     const mapping = [
       [z.string(), TextField],
       [NumberSchema, NumberField],
+      [z.boolean(), BooleanField],
+      [objectSchema2, BooleanField],
     ] as const;
 
     const Form = createTsForm(mapping);
 
+
     const schema = z.object({
-      nestedField: z.object({
-        name: z.string(),
-        age: NumberSchema,
-      })
+      nestedField: objectSchema,
+      nestedField2: objectSchema2
     });
-    const defaultValues = { nestedField: { name: 'name', age: 9 } };
-    // TODO: test submit rolls up the values correctly
+    const defaultValues = { nestedField: { text: 'name', age: 9 }, nestedField2 : {bool : true} };
     // TODO: test validation
-    render(<Form schema={schema} onSubmit={mockOnSubmit} defaultValues={defaultValues} renderAfter={() => <button type="submit">submit</button>}/>);
+    render(<Form schema={schema} onSubmit={mockOnSubmit} defaultValues={defaultValues} props={{nestedField2 :  { c: true}, nestedField : {text :{b : "1"}, age : {a : 1}}}} renderAfter={() => <button type="submit">submit</button>}/>);
     const button = screen.getByText("submit");
     await userEvent.click(button);
 
@@ -1170,7 +1182,7 @@ describe("createSchemaForm", () => {
     const NumberSchema = createUniqueFieldSchema(z.number(), "number");
     const mockOnSubmit = jest.fn();
 
-    function TextField() {
+    function TextField({} : { a? : 1}) {
       return <div>text</div>;
     }
 
@@ -1187,20 +1199,18 @@ describe("createSchemaForm", () => {
 
     const schema = z.object({
       arrayField: z.object({
-        name: z.string(),
+        text: z.string(),
         age: NumberSchema,
       }).array()
     });
     // TODO: test submit rolls up the values correctly
     // TODO: test validation
-    const defaultValues = { arrayField: [{ name: 'name', age: 9 }, { name: 'name2', age: 10 }] };
-    render(<Form schema={schema} onSubmit={mockOnSubmit} defaultValues={defaultValues} renderAfter={() => {
-      const form = useForm();
-      return <>
-      <div data-testid="errors">{JSON.stringify(form.formState.errors)}</div>
-      <button type="submit">submit</button>
-      </>
-    }}/>);
+    const defaultValues = { arrayField: [{ text: 'name', age: 9 }, { text: 'name2', age: 10 }] };
+    render(<Form schema={schema} onSubmit={mockOnSubmit} defaultValues={defaultValues}  
+      props={{arrayField : {text : { a : 1}}}}
+      renderAfter={() => {
+      return <button type="submit">submit</button>
+    }}>{({renderedFields}) => {return <>{renderedFields.arrayField.map(({text, age}) => <>{text}{age}</>)}</>}}</Form>);
 
     const textNodes = screen.queryAllByText("text");
     textNodes.forEach((node) => expect(node).toBeInTheDocument());
@@ -1212,7 +1222,6 @@ describe("createSchemaForm", () => {
 
     const button = screen.getByText("submit");
     await userEvent.click(button);
-    console.log('errors', screen.queryByTestId('errors')?.textContent);
     expect(mockOnSubmit).toHaveBeenCalledWith(defaultValues);
   });
 });
