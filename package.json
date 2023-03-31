@@ -1,6 +1,6 @@
 {
   "name": "zod-form",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Build forms faster!",
   "module": "lib/index.mjs",
   "main": "lib/index.cjs",
