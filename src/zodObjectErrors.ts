@@ -22,13 +22,12 @@ function isWithTopLevelErrorMessage(
   return TopLevelErrorSchema.safeParse(o).success;
 }
 
-export type RecursiveErrorType<T extends any> = T extends object
-  ?
-      | {
-          errorMessage?: string;
-        } & {
-          [key in keyof T]+?: RecursiveErrorType<T[key]>;
-        }
+export type RecursiveErrorType<T> = T extends object
+  ? {
+      errorMessage?: string;
+    } & {
+      [key in keyof T]+?: RecursiveErrorType<T[key]>;
+    }
   : {
       errorMessage: string;
     };

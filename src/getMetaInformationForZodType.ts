@@ -1,5 +1,5 @@
-import { z } from "zod";
-import { RTFSupportedZodTypes } from "./supportedZodTypes";
+import * as z from "zod";
+import type { RTFSupportedZodTypes } from "./supportedZodTypes";
 import { unwrap } from "./unwrap";
 
 export const SPLIT_DESCRIPTION_SYMBOL = " // ";
@@ -17,8 +17,8 @@ export function parseDescription(description?: string) {
 }
 
 export function getEnumValues(type: RTFSupportedZodTypes) {
-  if (!(type._def.typeName === z.ZodFirstPartyTypeKind.ZodEnum)) return;
-  return type._def.values as readonly string[];
+  if (!(type instanceof z.ZodEnum)) return;
+  return type.options as readonly string[];
 }
 
 function isSchemaWithUnwrapMethod(
@@ -28,11 +28,12 @@ function isSchemaWithUnwrapMethod(
 }
 
 function recursivelyGetDescription(type: RTFSupportedZodTypes) {
-  let t = type;
-  if (t._def.description) return t._def.description;
-  while (isSchemaWithUnwrapMethod(t)) {
-    t = t.unwrap();
-    if (t._def.description) return t._def.description;
+  const t = type;
+  const description = t.meta()?.description;
+
+  if (description) return description;
+  if (isSchemaWithUnwrapMethod(t)) {
+    return recursivelyGetDescription(t.unwrap());
   }
   return;
 }
