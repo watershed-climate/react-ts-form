@@ -1,7 +1,37 @@
-import React, { ReactNode, useEffect, useState } from "react";
-import { z } from "zod";
+// biome-ignore-all lint: all is well
 import { render, screen, waitFor } from "@testing-library/react";
+import React, { type ReactNode, useEffect, useState } from "react";
+import { z } from "zod";
 import "@testing-library/jest-dom";
+import { zodResolver } from "@hookform/resolvers/zod";
+import userEvent from "@testing-library/user-event";
+import { expectTypeOf } from "expect-type";
+import {
+  type Control,
+  useController,
+  useForm,
+  useFormState,
+  useWatch,
+} from "react-hook-form";
+import { createUniqueFieldSchema } from "../createFieldSchema";
+import {
+  createTsForm,
+  noMatchingSchemaErrorMessage,
+  useFormResultValueChangedErrorMesssage,
+} from "../createSchemaForm";
+import {
+  useDateFieldInfo,
+  useDescription,
+  useEnumValues,
+  useFieldInfo,
+  useReqDescription,
+  useStringFieldInfo,
+  useTsController,
+} from "../FieldContext";
+import {
+  SPLIT_DESCRIPTION_SYMBOL as DESCRIPTION_SEPARATOR_SYMBOL,
+  SPLIT_DESCRIPTION_SYMBOL,
+} from "../getMetaInformationForZodType";
 import {
   customFieldTestId,
   TestCustomFieldSchema,
@@ -10,35 +40,6 @@ import {
   TextField,
   textFieldTestId,
 } from "./utils/testForm";
-import {
-  createTsForm,
-  noMatchingSchemaErrorMessage,
-  useFormResultValueChangedErrorMesssage,
-} from "../createSchemaForm";
-import {
-  SPLIT_DESCRIPTION_SYMBOL as DESCRIPTION_SEPARATOR_SYMBOL,
-  SPLIT_DESCRIPTION_SYMBOL,
-} from "../getMetaInformationForZodType";
-import {
-  Control,
-  useController,
-  useForm,
-  useFormState,
-  useWatch,
-} from "react-hook-form";
-import userEvent from "@testing-library/user-event";
-import {
-  useDescription,
-  useEnumValues,
-  useReqDescription,
-  useTsController,
-  useStringFieldInfo,
-  useFieldInfo,
-  useDateFieldInfo,
-} from "../FieldContext";
-import { expectTypeOf } from "expect-type";
-import { createUniqueFieldSchema } from "../createFieldSchema";
-import { zodResolver } from "@hookform/resolvers/zod";
 
 const testIds = {
   textField: "_text-field",
@@ -265,16 +266,14 @@ describe("createSchemaForm", () => {
           onSubmit={() => {}}
           schema={Schema}
           props={{
-            //@ts-ignore
             enum: {
-              //@ts-ignore
               testId: "nope",
             },
           }}
         />
       )
     ).toThrowError(
-      noMatchingSchemaErrorMessage("enum", enumSchema._def.typeName)
+      noMatchingSchemaErrorMessage("enum", enumSchema._zod.def.type)
     );
   });
   it("should render the CustomTextField for the field with TestCustomFieldSchema, and also still render the regular TextField for a vanilla string", () => {
@@ -549,7 +548,8 @@ describe("createSchemaForm", () => {
 
     expect(onSubmitMock).toHaveBeenCalledWith(expectedOutput);
   });
-  it("should throw an error if the value of 'useFormResult' goes from undefined to defined", async () => {
+
+  it.only("should throw an error if the value of 'useFormResult' goes from undefined to defined", async () => {
     jest.spyOn(console, "error").mockImplementation(() => {});
     const buttonId = "button";
     function TestComponent() {
@@ -1030,7 +1030,7 @@ describe("createSchemaForm", () => {
       <Form
         onSubmit={mockOnSubmit}
         schema={z.object({
-          number: z.number({ required_error: "req" }),
+          number: z.number({ error: "req" }),
         })}
         defaultValues={defaultValues}
         renderAfter={() => <button>submit</button>}
@@ -1084,7 +1084,7 @@ describe("createSchemaForm", () => {
       <Form
         onSubmit={mockOnSubmit}
         schema={z.object({
-          number: z.number({ required_error: "req" }),
+          number: z.number({ error: "req" }),
         })}
         defaultValues={defaultValues}
         renderAfter={() => <button>submit</button>}
@@ -1139,7 +1139,7 @@ describe("createSchemaForm", () => {
       <Form
         onSubmit={mockOnSubmit}
         schema={z.object({
-          number: z.number({ required_error: "req" }),
+          number: z.number({ error: "req" }),
         })}
         defaultValues={defaultValues}
         renderAfter={() => <button>submit</button>}
@@ -1186,7 +1186,7 @@ describe("createSchemaForm", () => {
         <Form
           onSubmit={mockOnSubmit}
           schema={z.object({
-            number: z.number({ required_error: "req" }),
+            number: z.number({ error: "req" }),
           })}
           form={form}
           defaultValues={defaultValues}

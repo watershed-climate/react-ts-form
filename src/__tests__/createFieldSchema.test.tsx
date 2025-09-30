@@ -74,7 +74,7 @@ describe("addHiddenProperties", () => {
     });
     expect(
       isSchemaWithHiddenProperties(withHiddenProperties) &&
-        withHiddenProperties._def[HIDDEN_ID_PROPERTY] === id
+        withHiddenProperties._zod.def[HIDDEN_ID_PROPERTY] === id
     ).toStrictEqual(true);
   });
 });

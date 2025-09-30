@@ -1,24 +1,9 @@
-import {
-  z,
-  ZodArray,
-  ZodDefault,
-  ZodEnum,
-  ZodFirstPartyTypeKind,
-  ZodNullable,
-  ZodOptional,
-} from "zod";
+import * as z from "zod";
 import {
   HIDDEN_ID_PROPERTY,
   isSchemaWithHiddenProperties,
 } from "./createFieldSchema";
-import { RTFSupportedZodTypes } from "./supportedZodTypes";
-
-const unwrappable = new Set<z.ZodFirstPartyTypeKind>([
-  z.ZodFirstPartyTypeKind.ZodOptional,
-  z.ZodFirstPartyTypeKind.ZodNullable,
-  z.ZodFirstPartyTypeKind.ZodBranded,
-  z.ZodFirstPartyTypeKind.ZodDefault,
-]);
+import type { RTFSupportedZodTypes } from "./supportedZodTypes";
 
 export type UnwrappedRTFSupportedZodTypes = {
   type: RTFSupportedZodTypes;
@@ -33,32 +18,28 @@ export function unwrap(
   let r = type;
   let unwrappedHiddenId: null | string = null;
 
-  while (unwrappable.has(r._def.typeName)) {
+  while (
+    r instanceof z.ZodOptional ||
+    r instanceof z.ZodNullable ||
+    r instanceof z.ZodDefault
+  ) {
+    console.log(r, r instanceof z.ZodOptional, r instanceof z.ZodNullable);
     if (isSchemaWithHiddenProperties(r)) {
-      unwrappedHiddenId = r._def[HIDDEN_ID_PROPERTY];
+      unwrappedHiddenId = r._zod.def[HIDDEN_ID_PROPERTY];
     }
-    switch (r._def.typeName) {
-      case z.ZodFirstPartyTypeKind.ZodOptional:
-        r = r._def.innerType;
-        break;
-      case z.ZodFirstPartyTypeKind.ZodBranded:
-        r = r._def.type;
-        break;
-      case z.ZodFirstPartyTypeKind.ZodNullable:
-        r = r._def.innerType;
-        break;
-      // @ts-ignore
-      case z.ZodFirstPartyTypeKind.ZodDefault:
-        // @ts-ignore
-        r = r._def.innerType;
-        break;
+    if (r instanceof z.ZodOptional) {
+      r = r._zod.def.innerType;
+    } else if (r instanceof z.ZodNullable) {
+      r = r._zod.def.innerType;
+    } else if (r instanceof z.ZodDefault) {
+      r = r._zod.def.innerType;
     }
   }
 
   let innerHiddenId: null | string = null;
 
   if (isSchemaWithHiddenProperties(r)) {
-    innerHiddenId = r._def[HIDDEN_ID_PROPERTY];
+    innerHiddenId = r._zod.def[HIDDEN_ID_PROPERTY];
   }
 
   return {
@@ -67,12 +48,16 @@ export function unwrap(
   };
 }
 
-export function unwrapEffects(effects: RTFSupportedZodTypes) {
-  if (effects._def.typeName === ZodFirstPartyTypeKind.ZodEffects) {
-    return effects._def.schema;
+export function unwrapEffects<T>(schema: T | z.ZodPipe | z.ZodTransform): T {
+  if (schema instanceof z.ZodPipe) {
+    if (schema._zod.def.out instanceof z.ZodTransform) {
+      return unwrapEffects<T>(schema._zod.def.out);
+    }
+    return schema._zod.def.in as T;
   }
-  return effects;
+  return schema as T;
 }
+
 
 export type UnwrapPreviousLevel = [never, 0, 1, 2, 3];
 export type UnwrapMaxRecursionDepth = 3;
@@ -90,11 +75,11 @@ export type UnwrapZodType<
   Level extends UnwrapPreviousLevel[number] = UnwrapMaxRecursionDepth
 > = [Level] extends [never]
   ? never
-  : T extends ZodOptional<any> | ZodNullable<any> | ZodDefault<any>
+  : T extends z.ZodOptional<any> | z.ZodNullable<any> | z.ZodDefault<any>
   ? UnwrapZodType<T["_def"]["innerType"], UnwrapPreviousLevel[Level]>
-  : T extends ZodArray<any, any>
+  : T extends z.ZodArray<any>
   ? // allow another 3 levels of recursion for the array
-    ZodArray<UnwrapZodType<T["element"], UnwrapMaxRecursionDepth>>
-  : T extends ZodEnum<any>
-  ? ZodEnum<any>
+    z.ZodArray<UnwrapZodType<T["element"], UnwrapMaxRecursionDepth>>
+  : T extends z.ZodEnum<any>
+  ? z.ZodEnum<any>
   : T;
