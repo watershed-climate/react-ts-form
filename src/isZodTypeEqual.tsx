@@ -1,15 +1,17 @@
-import {
-  AnyZodObject,
+// biome-ignore-all lint: all is well
+import type {
   ZodArray,
   ZodBoolean,
   ZodDate,
-  ZodDefaultDef,
-  ZodFirstPartyTypeKind,
+  ZodEnum,
+  ZodNullable,
   ZodNumber,
+  ZodObject,
+  ZodOptional,
   ZodString,
-  z,
 } from "zod";
-import { RTFSupportedZodTypes } from "./supportedZodTypes";
+import * as z from "zod";
+import type { RTFSupportedZodTypes } from "./supportedZodTypes";
 import { unwrap } from "./unwrap";
 
 export function isZodTypeEqual(
@@ -20,80 +22,63 @@ export function isZodTypeEqual(
   // if typeNames are equal Unwrap Appropriate Types:
   // optional
 
-  let { type: a, _rtf_id: idA } = unwrap(_a);
-  let { type: b, _rtf_id: idB } = unwrap(_b);
+  const { type: a, _rtf_id: idA } = unwrap(_a);
+  const { type: b, _rtf_id: idB } = unwrap(_b);
 
   if (idA || idB) {
     return idA === idB;
   }
 
-  if (a._def.typeName !== b._def.typeName) return false;
+  if (a.constructor !== b.constructor) return false;
 
-  // array
-
-  if (
-    a._def.typeName === ZodFirstPartyTypeKind.ZodArray &&
-    b._def.typeName === ZodFirstPartyTypeKind.ZodArray
-  ) {
-    if (isZodTypeEqual(a._def.type, b._def.type)) return true;
+  if (a instanceof z.ZodArray && b instanceof z.ZodArray) {
+    if (isZodTypeEqual(a._zod.def.element, b._zod.def.element)) return true;
     return false;
   }
 
-  // set
-
-  if (
-    a._def.typeName === ZodFirstPartyTypeKind.ZodSet &&
-    b._def.typeName === ZodFirstPartyTypeKind.ZodSet
-  ) {
-    if (isZodTypeEqual(a._def.valueType, b._def.valueType)) return true;
+  if (a instanceof z.ZodSet && b instanceof z.ZodSet) {
+    if (isZodTypeEqual(a._zod.def.valueType, b._zod.def.valueType)) return true;
     return false;
   }
 
-  // map
-
-  if (
-    a._def.typeName === ZodFirstPartyTypeKind.ZodMap &&
-    b._def.typeName === ZodFirstPartyTypeKind.ZodMap
-  ) {
+  if (a instanceof z.ZodMap && b instanceof z.ZodMap) {
     if (
-      isZodTypeEqual(a._def.keyType, b._def.keyType) &&
-      isZodTypeEqual(a._def.valueType, b._def.valueType)
+      isZodTypeEqual(a._zod.def.keyType, b._zod.def.keyType) &&
+      isZodTypeEqual(
+        a._zod.def.valueType as RTFSupportedZodTypes,
+        b._zod.def.valueType as RTFSupportedZodTypes
+      )
     )
       return true;
 
     return false;
   }
 
-  // record
-  if (
-    a._def.typeName === ZodFirstPartyTypeKind.ZodRecord &&
-    b._def.typeName === ZodFirstPartyTypeKind.ZodRecord
-  ) {
-    if (isZodTypeEqual(a._def.valueType, b._def.valueType)) return true;
+  if (a instanceof z.ZodRecord && b instanceof z.ZodRecord) {
+    if (isZodTypeEqual(a._zod.def.valueType, b._zod.def.valueType)) return true;
     return false;
   }
 
-  // tuple
-  if (
-    a._def.typeName === ZodFirstPartyTypeKind.ZodTuple &&
-    b._def.typeName === ZodFirstPartyTypeKind.ZodTuple
-  ) {
+  if (a instanceof z.ZodTuple && b instanceof z.ZodTuple) {
     const itemsA = a._def.items;
     const itemsB = b._def.items;
     if (itemsA.length !== itemsB.length) return false;
     for (let i = 0; i < itemsA.length; i++) {
-      if (!isZodTypeEqual(itemsA[i], itemsB[i])) return false;
+      if (
+        !isZodTypeEqual(
+          itemsA[i] as RTFSupportedZodTypes,
+          itemsB[i] as RTFSupportedZodTypes
+        )
+      )
+        return false;
     }
     return true;
   }
 
   // Recursively check if objects are equal
-  if (
-    a._def.typeName === ZodFirstPartyTypeKind.ZodObject &&
-    b._def.typeName === ZodFirstPartyTypeKind.ZodObject
-  ) {
-    const shapeA = a._def.shape();
-    const shapeB = b._def.shape();
+  if (a instanceof z.ZodObject && b instanceof z.ZodObject) {
+    const shapeA = a._zod.def.shape;
+    const shapeB = b._zod.def.shape;
     if (!shapeA || !shapeB) {
       if (!shapeA && !shapeB) return true;
       return false;
@@ -117,6 +102,7 @@ export function isZodTypeEqual(
       if (!valB || !isZodTypeEqual(valA, valB)) return false;
     }
   }
+
   return true;
 }
 
@@ -148,11 +134,13 @@ export function isZodArray(
 
 export function isZodObject(
   zodType: RTFSupportedZodTypes
-): zodType is AnyZodObject {
+): zodType is ZodObject<any> {
   return isTypeOf(zodType, "ZodObject");
 }
 
-export function isZodDefaultDef(zodDef: unknown): zodDef is ZodDefaultDef {
+export function isZodDefaultDef(
+  zodDef: unknown
+): zodDef is { defaultValue: () => any } {
   return Boolean(
     zodDef &&
       typeof zodDef === "object" &&
@@ -166,13 +154,60 @@ export function isZodDate(zodType: RTFSupportedZodTypes): zodType is ZodDate {
 }
 
 export function isTypeOf(zodType: RTFSupportedZodTypes, type: ZodKindName) {
-  return zodType._def.typeName === ZodFirstPartyTypeKind[type];
+  switch (type) {
+    case "ZodString":
+      return zodType instanceof z.ZodString;
+    case "ZodNumber":
+      return zodType instanceof z.ZodNumber;
+    case "ZodBoolean":
+      return zodType instanceof z.ZodBoolean;
+    case "ZodDate":
+      return zodType instanceof z.ZodDate;
+    case "ZodArray":
+      return zodType instanceof z.ZodArray;
+    case "ZodObject":
+      return zodType instanceof z.ZodObject;
+    case "ZodEnum":
+      return zodType instanceof z.ZodEnum;
+    case "ZodOptional":
+      return zodType instanceof z.ZodOptional;
+    case "ZodNullable":
+      return zodType instanceof z.ZodNullable;
+    default:
+      return false;
+  }
 }
 
-type ZodKindName = keyof typeof z.ZodFirstPartyTypeKind;
+type ZodKindName =
+  | "ZodString"
+  | "ZodNumber"
+  | "ZodBoolean"
+  | "ZodDate"
+  | "ZodArray"
+  | "ZodObject"
+  | "ZodEnum"
+  | "ZodOptional"
+  | "ZodNullable";
 
-export type ZodKindNameToType<K extends keyof typeof z.ZodFirstPartyTypeKind> =
-  InstanceType<(typeof z)[K]>;
+export type ZodKindNameToType<K extends ZodKindName> = K extends "ZodString"
+  ? ZodString
+  : K extends "ZodNumber"
+  ? ZodNumber
+  : K extends "ZodBoolean"
+  ? ZodBoolean
+  : K extends "ZodDate"
+  ? ZodDate
+  : K extends "ZodArray"
+  ? ZodArray<any>
+  : K extends "ZodObject"
+  ? ZodObject<any>
+  : K extends "ZodEnum"
+  ? ZodEnum<any>
+  : K extends "ZodOptional"
+  ? ZodOptional<any>
+  : K extends "ZodNullable"
+  ? ZodNullable<any>
+  : never;
 
 export type RTFSupportedZodFirstPartyTypeKindMap = {
   [K in ZodKindName as ZodKindNameToType<K> extends RTFSupportedZodTypes
