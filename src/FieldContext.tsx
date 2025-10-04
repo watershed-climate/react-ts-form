@@ -7,21 +7,9 @@ import {
   UseControllerReturn,
 } from "react-hook-form";
 import { errorFromRhfErrorObject } from "./zodObjectErrors";
-import { RTFSupportedZodTypes } from "./supportedZodTypes";
-import { UnwrapZodType, unwrap } from "./unwrap";
-import {
-  RTFSupportedZodFirstPartyTypeKind,
-  RTFSupportedZodFirstPartyTypeKindMap,
-  isTypeOf,
-  isZodArray,
-  isZodDefaultDef,
-} from "./isZodTypeEqual";
+import { unwrap } from "./unwrap";
 
-import {
-  PickPrimitiveObjectProperties,
-  pickPrimitiveObjectProperties,
-} from "./utilities";
-import { ZodDefaultDef } from "zod";
+import * as z from 'zod';
 
 export const FieldContext = createContext<null | {
   control: Control<any>;
@@ -29,7 +17,7 @@ export const FieldContext = createContext<null | {
   label?: string;
   placeholder?: string;
   enumValues?: string[];
-  zodType: RTFSupportedZodTypes;
+  zodType: z.ZodType;
   addToCoerceUndefined: (v: string) => void;
   removeFromCoerceUndefined: (v: string) => void;
 }>(null);
@@ -51,7 +39,7 @@ export function FieldContextProvider({
   placeholder?: string;
   enumValues?: string[];
   children: ReactNode;
-  zodType: RTFSupportedZodTypes;
+  zodType: z.ZodType;
   addToCoerceUndefined: (v: string) => void;
   removeFromCoerceUndefined: (v: string) => void;
 }) {
@@ -267,27 +255,23 @@ export function useEnumValues() {
   return enumValues;
 }
 
-function getFieldInfo<
-  TZodType extends RTFSupportedZodTypes,
-  TUnwrapZodType extends UnwrapZodType<TZodType> = UnwrapZodType<TZodType>
->(zodType: TZodType) {
-  const { type, _rtf_id } = unwrap(zodType);
+function getFieldInfo(zodType: z.ZodType) {
+  const type = unwrap(zodType);
 
   function getDefaultValue() {
-    const def = zodType._def;
-    if (isZodDefaultDef(def)) {
-      const defaultValue = (def as ZodDefaultDef<TZodType>).defaultValue();
+    if (zodType instanceof z.ZodDefault) {
+      const defaultValue = (zodType as z.ZodDefault)._zod.def.defaultValue;
       return defaultValue;
     }
     return undefined;
   }
 
   return {
-    type: type as TUnwrapZodType,
+    type,
     zodType,
-    uniqueId: _rtf_id ?? undefined,
-    isOptional: zodType.isOptional(),
-    isNullable: zodType.isNullable(),
+    uniqueId: type.meta()?.['_rtf_id'],
+    isOptional: z.safeParse(zodType, undefined).success,
+    isNullable: z.safeParse(zodType, null).success,
     defaultValue: getDefaultValue(),
   };
 }
@@ -295,15 +279,10 @@ function getFieldInfo<
 /**
  * @internal
  */
-export function internal_useFieldInfo<
-  TZodType extends RTFSupportedZodTypes = RTFSupportedZodTypes,
-  TUnwrappedZodType extends UnwrapZodType<TZodType> = UnwrapZodType<TZodType>
->(hookName: string) {
+export function internal_useFieldInfo(hookName: string) {
   const { zodType, label, placeholder } = useContextProt(hookName);
 
-  const fieldInfo = getFieldInfo<TZodType, TUnwrappedZodType>(
-    zodType as TZodType
-  );
+  const fieldInfo = getFieldInfo(zodType);
 
   return { ...fieldInfo, label, placeholder };
 }
@@ -321,45 +300,42 @@ export function useFieldInfo() {
  * The zod type objects contain virtual properties which requires us to
  * manually pick the properties we'd like inorder to get their values.
  */
-export function usePickZodFields<
-  TZodKindName extends RTFSupportedZodFirstPartyTypeKind,
-  TZodType extends RTFSupportedZodFirstPartyTypeKindMap[TZodKindName] = RTFSupportedZodFirstPartyTypeKindMap[TZodKindName],
-  TUnwrappedZodType extends UnwrapZodType<TZodType> = UnwrapZodType<TZodType>,
-  TPick extends Partial<
-    PickPrimitiveObjectProperties<TUnwrappedZodType, true>
-  > = Partial<PickPrimitiveObjectProperties<TUnwrappedZodType, true>>
->(zodKindName: TZodKindName, pick: TPick, hookName: string) {
-  const fieldInfo = internal_useFieldInfo<TZodType, TUnwrappedZodType>(
-    hookName
-  );
+// export function usePickZodFields<
+//   TPick extends Partial<
+//     PickPrimitiveObjectProperties<z.ZodType, true>
+//   > = Partial<PickPrimitiveObjectProperties<z.ZodType, true>>
+// >(type: z.ZodType, pick: TPick, hookName: string) {
+//   const fieldInfo = internal_useFieldInfo(
+//     hookName
+//   );
 
-  function getType() {
-    const { type } = fieldInfo;
+//   function getType() {
+//     const { type } = fieldInfo;
 
-    if (zodKindName !== "ZodArray" && isZodArray(type)) {
-      const element = type.element;
-      return element as any;
-    }
+//     if (type instanceof z.ZodArray) {
+//       const element = type.element;
+//       return element as z.ZodType;
+//     }
 
-    return type;
-  }
+//     return type;
+//   }
 
-  const type = getType();
+//   const fieldInfoType = getType();
 
-  if (!isTypeOf(type, zodKindName)) {
-    throw new Error(
-      fieldSchemaMismatchHookError(hookName, {
-        expectedType: zodKindName,
-        receivedType: type._def.typeName,
-      })
-    );
-  }
+//   if (fieldInfoType._zod.def.type !== type._zod.def.type) {
+//     throw new Error(
+//       fieldSchemaMismatchHookError(hookName, {
+//         expectedType: fieldInfoType._zod.def.type,
+//         receivedType: type._zod.def.type,
+//       })
+//     );
+//   }
 
-  return {
-    ...pickPrimitiveObjectProperties<TUnwrappedZodType, TPick>(type, pick),
-    ...fieldInfo,
-  };
-}
+//   return {
+//     ...pickPrimitiveObjectProperties<typeof type, TPick>(type, pick),
+//     ...fieldInfo,
+//   };
+// }
 
 /**
  * Returns schema-related information for a ZodString field
@@ -374,26 +350,42 @@ export function usePickZodFields<
  * ```
  * @returns Information for a ZodString field
  */
-export function useStringFieldInfo() {
-  return usePickZodFields(
-    "ZodString",
-    {
-      description: true,
-      isCUID: true,
-      isCUID2: true,
-      isDatetime: true,
-      isEmail: true,
-      isEmoji: true,
-      isIP: true,
-      isULID: true,
-      isURL: true,
-      isUUID: true,
-      maxLength: true,
-      minLength: true,
-    },
-    "useStringFieldInfo"
-  );
-}
+// export function useStringFieldInfo() {
+//   const fieldInfo = internal_useFieldInfo(
+//     "useStringFieldInfo"
+//   );
+
+//   const type = fieldInfo.type instanceof z.ZodArray ? fieldInfo.type.element : fieldInfo.type;
+
+//   if (fieldInfo.type._zod.def.type !== type._zod.def.type) {
+//     throw new Error(
+//       fieldSchemaMismatchHookError("useStringFieldInfo", {
+//         expectedType: fieldInfo.type._zod.def.type,
+//         receivedType: type._zod.def.type,
+//       })
+//     );
+//   }
+
+//   z.string()
+//   return usePickZodFields(
+//     z.string(),
+//     {
+//       description: true,
+//       isCUID: true,
+//       isCUID2: true,
+//       isDatetime: true,
+//       isEmail: true,
+//       isEmoji: true,
+//       isIP: true,
+//       isULID: true,
+//       isURL: true,
+//       isUUID: true,
+//       maxLength: true,
+//       minLength: true,
+//     },
+//     "useStringFieldInfo"
+//   );
+// }
 
 /**
  * Returns schema-related information for a ZodArray field
@@ -407,15 +399,15 @@ export function useStringFieldInfo() {
  * ```
  * @returns Information for a ZodArray field
  */
-export function useArrayFieldInfo() {
-  return usePickZodFields(
-    "ZodArray",
-    {
-      description: true,
-    },
-    "useArrayFieldInfo"
-  );
-}
+// export function useArrayFieldInfo() {
+//   return usePickZodFields(
+//     z.any().array(),
+//     {
+//       description: true,
+//     },
+//     "useArrayFieldInfo"
+//   );
+// }
 
 /**
  * Returns schema-related information for a ZodDate field
@@ -429,22 +421,22 @@ export function useArrayFieldInfo() {
  * ```
  * @returns Information for a ZodDate field
  */
-export function useDateFieldInfo() {
-  const result = usePickZodFields(
-    "ZodDate",
-    {
-      description: true,
-      maxDate: true,
-      minDate: true,
-    },
-    "useDateFieldInfo"
-  );
-  return {
-    ...result,
-    maxDate: result.type.maxDate,
-    minDate: result.type.minDate,
-  };
-}
+// export function useDateFieldInfo() {
+//   const result = usePickZodFields(
+//     z.date(),
+//     {
+//       description: true,
+//       maxDate: true,
+//       minDate: true,
+//     },
+//     "useDateFieldInfo"
+//   );
+//   return {
+//     ...result,
+//     maxDate: (result.type as z.ZodDate)._zod.bag.maximum,
+//     minDate: (result.type as z.ZodDate)._zod.bag.minimum,
+//   };
+// }
 
 /**
  * Returns schema-related information for a ZodNumber field
@@ -464,16 +456,16 @@ export function useDateFieldInfo() {
  * ```
  * @returns Information for a ZodDate field
  */
-export function useNumberFieldInfo() {
-  return usePickZodFields(
-    "ZodNumber",
-    {
-      description: true,
-      isFinite: true,
-      isInt: true,
-      maxValue: true,
-      minValue: true,
-    },
-    "useNumberFieldInfo"
-  );
-}
+// export function useNumberFieldInfo() {
+//   return usePickZodFields(
+//     z.number(),
+//     {
+//       description: true,
+//       isFinite: true,
+//       isInt: true,
+//       maxValue: true,
+//       minValue: true,
+//     },
+//     "useNumberFieldInfo"
+//   );
+// }

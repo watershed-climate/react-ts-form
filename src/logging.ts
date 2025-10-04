@@ -1,4 +1,4 @@
-import { RTFSupportedZodTypes } from "./supportedZodTypes";
+import * as z from 'zod';
 
 const shownWarnings = {
   enum: false,
@@ -18,6 +18,6 @@ export function duplicateTypeError() {
   );
 }
 
-export function printWarningsForSchema(_type: RTFSupportedZodTypes) {
+export function printWarningsForSchema(_type: z.ZodType) {
   // placeholder in case we need future schema warnings
 }

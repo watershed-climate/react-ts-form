@@ -1,9 +1,8 @@
-import { Primitive as ZodPrimitive } from "zod";
 import { RemoveNull } from "./typeUtilities";
 
 type InternalKey = `_${string}`;
 
-type Primitive = Exclude<ZodPrimitive, symbol>;
+type Primitive = string | number | boolean | bigint | null | undefined;
 
 export type PickPrimitiveObjectProperties<
   T,

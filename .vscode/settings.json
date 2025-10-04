@@ -4,5 +4,6 @@
     "titleBar.activeBackground": "#513C12",
     "titleBar.activeForeground": "#FDFBF6"
   },
-  "typescript.tsdk": "node_modules/typescript/lib"
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "jest.runMode": "on-demand"
 }
