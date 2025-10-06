@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { RTFSupportedZodTypes } from "./supportedZodTypes";
 import { unwrap } from "./unwrap";
 
 export const SPLIT_DESCRIPTION_SYMBOL = " // ";
@@ -16,33 +15,25 @@ export function parseDescription(description?: string) {
   };
 }
 
-export function getEnumValues(type: RTFSupportedZodTypes) {
-  if (!(type._def.typeName === z.ZodFirstPartyTypeKind.ZodEnum)) return;
-  return type._def.values as readonly string[];
-}
-
-function isSchemaWithUnwrapMethod(
-  schema: object
-): schema is { unwrap: () => RTFSupportedZodTypes } {
-  return "unwrap" in schema;
-}
-
-function recursivelyGetDescription(type: RTFSupportedZodTypes) {
-  let t = type;
-  if (t._def.description) return t._def.description;
-  while (isSchemaWithUnwrapMethod(t)) {
-    t = t.unwrap();
-    if (t._def.description) return t._def.description;
+export function getEnumValues(type: z.ZodType): string[] | undefined {
+  if (type instanceof z.ZodEnum) {
+    return Object.keys(type.enum);
   }
   return;
 }
 
-export function getMetaInformationForZodType(type: RTFSupportedZodTypes) {
-  // TODO - Maybe figure out how to not call unwrap here? Seems wasteful calling it twice... probably doesn't matter though.
+
+// function recursivelyGetDescription(type: z.ZodType): string | undefined {
+//   if (type instanceof z.ZodOptional || type instanceof z.ZodNullable || type instanceof z.ZodDefault || type instanceof z.ZodLazy) {
+//     return recursivelyGetDescription(type.unwrap() as z.ZodType);
+//   }
+//   return type.meta()?.description;
+// }
+
+export function getMetaInformationForZodType(type: z.ZodType) {
   const unwrapped = unwrap(type);
-  const description = recursivelyGetDescription(type);
   return {
-    description: parseDescription(description),
-    enumValues: getEnumValues(unwrapped.type),
+    description: parseDescription(unwrapped.meta()?.description),
+    enumValues: getEnumValues(unwrap(type)),
   };
 }

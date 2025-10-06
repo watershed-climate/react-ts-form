@@ -1,50 +1,41 @@
+import { zodResolver } from "@hookform/resolvers/zod";
 import React, {
-  ForwardRefExoticComponent,
-  Fragment,
-  ReactElement,
-  ReactNode,
-  RefAttributes,
+  type ComponentProps,
   createContext,
+  type ForwardRefExoticComponent,
+  Fragment,
+  type ReactElement,
+  type ReactNode,
+  type RefAttributes,
   useContext,
   useEffect,
   useRef,
 } from "react";
-import { ComponentProps } from "react";
 import {
-  DeepPartial,
-  ErrorOption,
+  type ErrorOption,
   FormProvider,
+  type UseFormReturn,
   useForm,
   useFormContext,
-  UseFormReturn,
+  type Resolver,
+  type UseFormSetError,
+  type SubmitHandler,
+  type ResolverResult,
+  type DefaultValues,
 } from "react-hook-form";
-import {
-  AnyZodObject,
-  z,
-  ZodArray,
-  ZodEffects,
-  ZodFirstPartyTypeKind,
-} from "zod";
-import { getComponentForZodType } from "./getComponentForZodType";
-import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  DistributiveOmit,
-  IndexOf,
-  IndexOfUnwrapZodType,
-  RequireKeysWithRequiredChildren,
-  UnwrapMapping,
-} from "./typeUtilities";
-import { getMetaInformationForZodType } from "./getMetaInformationForZodType";
-import { unwrapEffects } from "./unwrap";
-import { RTFBaseZodType, RTFSupportedZodTypes } from "./supportedZodTypes";
+import * as z from "zod";
+import { duplicateIdErrorMessage } from "./createFieldSchema";
 import { FieldContextProvider, useMaybeFieldName } from "./FieldContext";
+import { getComponentForZodType } from "./getComponentForZodType";
+import { getMetaInformationForZodType } from "./getMetaInformationForZodType";
 import { isZodTypeEqual } from "./isZodTypeEqual";
 import { duplicateTypeError, printWarningsForSchema } from "./logging";
-import {
-  duplicateIdErrorMessage,
-  HIDDEN_ID_PROPERTY,
-  isSchemaWithHiddenProperties,
-} from "./createFieldSchema";
+import type {
+  DistributiveOmit,
+  IndexOf,
+  RequireKeysWithRequiredChildren,
+} from "./typeUtilities";
+import { Unwrapped } from "./unwrap";
 
 /**
  * @internal
@@ -62,7 +53,7 @@ export type ReactComponentWithRequiredProps<
   | (ForwardRefExoticComponent<Props> & RefAttributes<unknown>);
 
 export type MappingItem<PropType extends ReactProps> = readonly [
-  RTFBaseZodType,
+  z.ZodType,
   ReactComponentWithRequiredProps<PropType>
 ];
 
@@ -102,39 +93,26 @@ export type ExtraProps = {
   afterElement?: ReactNode;
 };
 
-/**
- * @internal
- */
-export type UnwrapEffects<
-  T extends RTFSupportedZodTypes | ZodEffects<any, any>
-> = T extends AnyZodObject
-  ? T
-  : T extends ZodEffects<infer EffectsSchema, any>
-  ? EffectsSchema extends ZodEffects<infer EffectsSchemaInner, any>
-    ? EffectsSchemaInner
-    : EffectsSchema
-  : never;
-
-function checkForDuplicateTypes(array: RTFSupportedZodTypes[]) {
+function checkForDuplicateTypes(array: z.ZodType[]) {
   var combinations = array.flatMap((v, i) =>
     array.slice(i + 1).map((w) => [v, w] as const)
   );
   for (const [a, b] of combinations) {
     printWarningsForSchema(a);
     printWarningsForSchema(b);
-    if (isZodTypeEqual(a!, b)) {
+    if (isZodTypeEqual(a!, b, new Set())) {
       duplicateTypeError();
     }
   }
 }
 
-function checkForDuplicateUniqueFields(array: RTFSupportedZodTypes[]) {
-  let usedIdsSet = new Set<string>();
+function checkForDuplicateUniqueFields(array: z.ZodType[]) {
+  const usedIdsSet = new Set<string>();
   for (const type of array) {
-    if (isSchemaWithHiddenProperties(type)) {
-      if (usedIdsSet.has(type._def[HIDDEN_ID_PROPERTY]))
-        throw new Error(duplicateIdErrorMessage(type._def[HIDDEN_ID_PROPERTY]));
-      usedIdsSet.add(type._def[HIDDEN_ID_PROPERTY]);
+    const id = type.meta()?.["_rtf_id"] as string | undefined;
+    if (id) {
+      if (usedIdsSet.has(id)) throw new Error(duplicateIdErrorMessage(id));
+      usedIdsSet.add(id);
     }
   }
 }
@@ -153,59 +131,54 @@ function propsMapToObect(propsMap: PropsMapping) {
   return r;
 }
 
-export type RTFFormSchemaType = z.AnyZodObject | ZodEffects<any, any>;
-export type RTFFormSubmitFn<SchemaType extends RTFFormSchemaType> = (
-  values: z.infer<SchemaType>
+export type RTFFormSchemaType = z.ZodObject;
+export type RTFFormSubmitFn<SchemaType extends Record<any, any>> = (
+  values: SchemaType
 ) => void | Promise<void>;
-export type SchemaShape<
-  SchemaType extends RTFSupportedZodTypes | ZodEffects<any, any>
-> = ReturnType<UnwrapEffects<SchemaType>["_def"]["shape"]>;
 
 export type IndexOfSchemaInMapping<
   Mapping extends FormComponentMapping,
-  SchemaType extends RTFSupportedZodTypes | ZodEffects<any, any>,
-  key extends keyof z.infer<UnwrapEffects<SchemaType>>
-> = IndexOf<
-  UnwrapMapping<Mapping>,
-  readonly [IndexOfUnwrapZodType<SchemaShape<SchemaType>[key]>, any]
->;
+  SchemaType extends z.ZodObject,
+  key extends keyof SchemaType["shape"]
+> = IndexOf<Mapping, readonly [Unwrapped<SchemaType["shape"][key]>, any]>;
 
 export type GetTupleFromMapping<
   Mapping extends FormComponentMapping,
-  SchemaType extends RTFSupportedZodTypes | ZodEffects<any, any>,
-  key extends keyof z.infer<UnwrapEffects<SchemaType>>
+  SchemaType extends z.ZodObject,
+  key extends keyof SchemaType["shape"]
 > = IndexOfSchemaInMapping<Mapping, SchemaType, key> extends never
   ? never
   : Mapping[IndexOfSchemaInMapping<Mapping, SchemaType, key>];
 
-export type Prev = [never, 0, 1, 2, 3];
+export type Prev = [never, 0, 1, 2, 3, 4];
 export type MaxDefaultRecursionDepth = 1;
 export type PropType<
   Mapping extends FormComponentMapping,
-  SchemaType extends RTFSupportedZodTypes | ZodEffects<any, any>,
+  SchemaType extends z.ZodType,
   PropsMapType extends PropsMapping = typeof defaultPropsMap,
   // this controls the depth we allow TS to go into the schema. 2 is enough for most cases, but we could consider exposing this as a generic to allow users to control the depth
-  Level extends Prev[number] = MaxDefaultRecursionDepth
-> = [Level] extends [never]
+  Level extends number = MaxDefaultRecursionDepth
+> = Level extends never
   ? never
-  : RequireKeysWithRequiredChildren<
+  : SchemaType extends z.ZodObject
+  ? RequireKeysWithRequiredChildren<
       Partial<{
-        [key in keyof z.infer<UnwrapEffects<SchemaType>>]: GetTupleFromMapping<
+        [key in keyof SchemaType["shape"]]: GetTupleFromMapping<
           Mapping,
           SchemaType,
           key
         > extends never
-          ? UnwrapEffects<SchemaType>["shape"][key] extends z.AnyZodObject
+          ? SchemaType["shape"][key] extends z.ZodObject
             ? PropType<
                 Mapping,
-                UnwrapEffects<SchemaType>["shape"][key],
+                SchemaType["shape"][key],
                 PropsMapType,
                 Prev[Level]
               >
-            : UnwrapEffects<SchemaType>["shape"][key] extends z.ZodArray<any>
+            : SchemaType["shape"][key] extends z.ZodArray
             ? PropType<
                 Mapping,
-                UnwrapEffects<SchemaType>["shape"][key]["element"],
+                SchemaType["shape"][key]["element"],
                 PropsMapType,
                 Prev[Level]
               >
@@ -221,24 +194,20 @@ export type PropType<
               ExtraProps
           : never;
       }>
-    >;
+    >
+  : never;
 
 export type RenderedFieldMap<
-  SchemaType extends AnyZodObject | ZodEffects<any, any>,
+  SchemaType extends z.ZodObject,
   Level extends Prev[number] = MaxDefaultRecursionDepth
 > = [Level] extends [never]
   ? never
   : {
-      [key in keyof z.infer<
-        UnwrapEffects<SchemaType>
-      >]: UnwrapEffects<SchemaType>["shape"][key] extends z.AnyZodObject
-        ? RenderedFieldMap<UnwrapEffects<SchemaType>["shape"][key], Prev[Level]>
-        : UnwrapEffects<SchemaType>["shape"][key] extends z.ZodArray<any>
-        ? UnwrapEffects<SchemaType>["shape"][key]["element"] extends z.AnyZodObject
-          ? RenderedFieldMap<
-              UnwrapEffects<SchemaType>["shape"][key]["element"],
-              Prev[Level]
-            >[]
+      [key in keyof SchemaType["shape"]]: SchemaType["shape"][key] extends z.ZodObject
+        ? RenderedFieldMap<SchemaType["shape"][key], Prev[Level]>
+        : SchemaType["shape"][key] extends z.ZodArray
+        ? SchemaType["shape"][key]["element"] extends z.ZodObject
+          ? RenderedFieldMap<SchemaType["shape"][key]["element"], Prev[Level]>[]
           : JSX.Element[]
         : JSX.Element;
     };
@@ -248,17 +217,17 @@ export type CustomChildRenderProp<SchemaType extends RTFFormSchemaType> = (
 ) => ReactElement<any, any> | null;
 
 export type RTFFormSpecificProps<
-  SchemaType extends z.AnyZodObject | ZodEffects<any, any>,
+  SchemaType extends z.ZodObject,
   FormType extends FormComponent = "form"
 > = {
   /**
    * Initializes your form with default values. Is a deep partial, so all properties and nested properties are optional.
    */
-  defaultValues?: DeepPartial<z.infer<UnwrapEffects<SchemaType>>>;
+  defaultValues?: DefaultValues<z.core.input<SchemaType>>;
   /**
    * A callback function that will be called with the data once the form has been submitted and validated successfully.
    */
-  onSubmit: RTFFormSubmitFn<SchemaType>;
+  onSubmit: RTFFormSubmitFn<z.infer<SchemaType>>;
   /**
    * A function that renders components after the form, the function is passed a `submit` function that can be used to trigger
    * form submission.
@@ -294,7 +263,7 @@ export type RTFFormSpecificProps<
    * }
    * ```
    */
-  form?: UseFormReturn<z.infer<SchemaType>>;
+  form?: UseFormReturn<z.input<SchemaType>, any, z.output<SchemaType>>;
 } & RequireKeysWithRequiredChildren<{
   /**
    * Props to pass to the form container component (by default the props that "form" tags accept)
@@ -307,7 +276,7 @@ export type RTFFormSpecificProps<
 
 export type RTFSharedFormProps<
   Mapping extends FormComponentMapping,
-  SchemaType extends z.AnyZodObject | ZodEffects<any, any>,
+  SchemaType extends z.ZodObject,
   PropsMapType extends PropsMapping = typeof defaultPropsMap
 > = {
   /**
@@ -337,7 +306,7 @@ export type RTFSharedFormProps<
 
 export type RTFFormProps<
   Mapping extends FormComponentMapping,
-  SchemaType extends z.AnyZodObject | ZodEffects<any, any>,
+  SchemaType extends z.ZodObject,
   PropsMapType extends PropsMapping = typeof defaultPropsMap,
   FormType extends FormComponent = "form"
 > = RTFSharedFormProps<Mapping, SchemaType, PropsMapType> &
@@ -347,7 +316,7 @@ export type TsForm<
   Mapping extends FormComponentMapping,
   PropsMapType extends PropsMapping,
   FormType extends FormComponent
-> = <SchemaType extends RTFFormSchemaType>(
+> = <SchemaType extends z.ZodObject>(
   props: RTFFormProps<Mapping, SchemaType, PropsMapType, FormType>
 ) => React.ReactElement<any, any>;
 
@@ -422,7 +391,10 @@ export function createTsForm<
    */
   options?: TsFormCreateOptions<FormType, PropsMapType>
 ): TsForm<Mapping, PropsMapType, FormType> {
-  return createTsFormAndFragment(componentMap, options)[0];
+  return createTsFormAndFragment<Mapping, PropsMapType, FormType>(
+    componentMap,
+    options
+  )[0];
 }
 
 /**
@@ -466,7 +438,7 @@ export function createTsFormAndFragment<
   const propsMap = propsMapToObect(options?.propsMap ?? defaultPropsMap);
   const FormComponent = options?.FormComponent || "form";
 
-  function TsForm<SchemaType extends RTFFormSchemaType>({
+  function TsForm<SchemaType extends z.ZodObject>({
     schema,
     onSubmit,
     props,
@@ -477,27 +449,24 @@ export function createTsFormAndFragment<
     form,
     children,
   }: RTFFormProps<Mapping, SchemaType, PropsMapType, FormType>) {
-    const useFormResultInitialValue = useRef<
-      undefined | ReturnType<typeof useForm>
-    >(form);
+    const useFormResultInitialValue = useRef(form);
     if (!!useFormResultInitialValue.current !== !!form) {
       throw new Error(useFormResultValueChangedErrorMesssage());
     }
     const resolver = zodResolver(schema);
-    const _form = (() => {
-      if (form) return form;
-      const uf = useForm({
-        resolver,
-        defaultValues,
-      });
-      return uf;
-    })();
+
+    const _form = form
+      ? form
+      : useForm({
+          resolver,
+        });
 
     useEffect(() => {
-      if (form && defaultValues) {
-        form.reset(defaultValues);
+      if (_form && defaultValues) {
+        _form.reset(defaultValues);
       }
-    }, []);
+    }, [_form]);
+
     const { handleSubmit, setError } = _form;
     const submitter = useSubmitter({
       resolver,
@@ -525,7 +494,7 @@ export function createTsFormAndFragment<
     );
   }
 
-  type RenderFieldProps<Type extends RTFSupportedZodTypes> = {
+  type RenderFieldProps<Type extends z.ZodObject> = {
     schema: Type;
     props: PropType<Mapping, Type, PropsMapType>;
     // when a number schemaKey is assumed to be an array index
@@ -535,7 +504,7 @@ export function createTsFormAndFragment<
     submitter: Submitter;
   };
 
-  function renderField<Type extends RTFSupportedZodTypes>({
+  function renderField<Type extends z.ZodObject>({
     schema,
     props,
     schemaKey,
@@ -543,19 +512,16 @@ export function createTsFormAndFragment<
     namePrefix,
     submitter,
   }: RenderFieldProps<Type>): RenderedElement {
-    function renderComponentForSchemaDeep<
-      NestedSchemaType extends RTFSupportedZodTypes | ZodEffects<any, any>
-    >(
-      _type: NestedSchemaType,
+    function renderComponentForSchemaDeep<NestedSchemaType extends z.ZodType>(
+      type: NestedSchemaType,
       props: PropType<Mapping, NestedSchemaType, PropsMapType> | undefined,
       prefixedKey: string,
       currentValue: any
     ): RenderedElement {
-      const type = unwrapEffects(_type);
       const Component = getComponentForZodType(type, componentMap);
       if (!Component) {
-        if (isAnyZodObject(type)) {
-          const shape: Record<string, RTFSupportedZodTypes> = type._def.shape();
+        if (type instanceof z.ZodObject) {
+          const shape: Record<string, z.ZodObject> = type.shape;
           return Object.entries(shape).reduce((accum, [subKey, subType]) => {
             accum[subKey] = renderComponentForSchemaDeep(
               subType,
@@ -566,11 +532,11 @@ export function createTsFormAndFragment<
             return accum;
           }, {} as RenderedObjectElements);
         }
-        if (isZodArray(type)) {
+        if (type instanceof z.ZodArray) {
           return ((currentValue as Array<any> | undefined | null) ?? []).map(
             (item, index) => {
               return renderComponentForSchemaDeep(
-                type.element,
+                type._zod.def.element as any,
                 props,
                 `${prefixedKey}[${index}]`,
                 item
@@ -581,7 +547,7 @@ export function createTsFormAndFragment<
         throw new Error(
           noMatchingSchemaErrorMessage(
             prefixedKey.toString(),
-            type._def.typeName
+            type._zod.def.type
           )
         );
       }
@@ -636,9 +602,7 @@ export function createTsFormAndFragment<
     );
   }
 
-  function FormFragmentField<
-    Type extends RTFSupportedZodTypes | ZodEffects<any, any>
-  >(
+  function FormFragmentField<Type extends z.ZodObject>(
     props: Pick<RenderFieldProps<Type>, "schema" | "schemaKey"> &
       RequireKeysWithRequiredChildren<{
         props?: PropType<Mapping, Type, PropsMapType>;
@@ -650,7 +614,7 @@ export function createTsFormAndFragment<
           renderField({
             ...props,
             // TS can't understand that props will be required  when necessary because of the generic
-            props: props.props!!,
+            props: props.props!,
             form: useFormContext(),
             namePrefix: useMaybeFieldName(),
             submitter: useSubmitterContext(),
@@ -660,7 +624,7 @@ export function createTsFormAndFragment<
     );
   }
 
-  function FormFragment<SchemaType extends RTFFormSchemaType>({
+  function FormFragment<SchemaType extends z.ZodObject>({
     schema,
     props,
     children,
@@ -678,11 +642,10 @@ export function createTsFormAndFragment<
       schema: SchemaType,
       props: PropType<Mapping, SchemaType, PropsMapType> | undefined
     ) {
-      type SchemaKey = keyof z.infer<UnwrapEffects<SchemaType>>;
-      const _schema = unwrapEffects(schema);
-      const shape: Record<string, RTFSupportedZodTypes> = _schema._def.shape();
+      type SchemaKey = keyof SchemaType["shape"];
+      const shape: Record<string, z.ZodObject> = schema.shape;
       return Object.entries(shape).reduce(
-        (accum, [key, subSchema]: [SchemaKey, RTFSupportedZodTypes]) => {
+        (accum, [key, subSchema]: [SchemaKey, z.ZodObject]) => {
           // we know this is a string but TS thinks it can be number and symbol so just in case stringify
           const stringKey = key.toString();
           const fieldProps = props && props[key] ? props[key] : undefined;
@@ -742,15 +705,20 @@ export function createTsFormAndFragment<
 // handles internal custom submit logic
 // Implements a workaround to allow devs to set form values to undefined (as it breaks react hook form)
 // For example https://github.com/react-hook-form/react-hook-form/discussions/2797
-function useSubmitter<SchemaType extends RTFFormSchemaType>({
+function useSubmitter<SchemaType extends z.ZodObject>({
   resolver,
   onSubmit,
   setError,
 }: {
-  resolver: ReturnType<typeof zodResolver>;
-  onSubmit: RTFFormSubmitFn<SchemaType>;
-  setError: ReturnType<typeof useForm>["setError"];
-}) {
+  resolver: Resolver<z.input<SchemaType>, unknown, z.output<SchemaType>>;
+  onSubmit: RTFFormSubmitFn<z.infer<SchemaType>>;
+  setError: UseFormSetError<z.input<SchemaType>>;
+}): {
+  submit: SubmitHandler<any>;
+  removeUndefined: (data: any) => any;
+  removeFromCoerceUndefined: (fieldName: string) => void;
+  addToCoerceUndefined: (fieldName: string) => void;
+} {
   const coerceUndefinedFieldsRef = useRef<Set<string>>(new Set());
 
   function addToCoerceUndefined(fieldName: string) {
@@ -769,22 +737,20 @@ function useSubmitter<SchemaType extends RTFFormSchemaType>({
     return r;
   }
 
-  function submit(data: z.infer<SchemaType>) {
-    return resolver(removeUndefined(data), {} as any, {} as any).then(
-      async (e) => {
-        const errorKeys = Object.keys(e.errors);
-        if (!errorKeys.length) {
-          await onSubmit(e.values);
-          return;
-        }
-        for (const key of errorKeys) {
-          setError(
-            key as any,
-            (e.errors as any)[key] as unknown as ErrorOption
-          );
-        }
-      }
-    );
+  async function submit(data: z.infer<SchemaType>) {
+    const e = await (resolver(
+      removeUndefined(data) as any,
+      {},
+      {} as any
+    ) as Promise<ResolverResult<z.infer<SchemaType>, any>>);
+    const errorKeys = Object.keys(e.errors);
+    if (!errorKeys.length) {
+      await onSubmit(e.values);
+      return;
+    }
+    for (const key of errorKeys) {
+      setError(key as any, (e.errors as any)[key] as unknown as ErrorOption);
+    }
   }
 
   return {
@@ -813,11 +779,6 @@ export function SubmitterContextProvider({
 }: ReturnType<typeof useSubmitter> & { children: ReactNode }) {
   return <SubmitterContext.Provider value={submitter} children={children} />;
 }
-
-const isAnyZodObject = (schema: RTFSupportedZodTypes): schema is AnyZodObject =>
-  schema._def.typeName === ZodFirstPartyTypeKind.ZodObject;
-const isZodArray = (schema: RTFSupportedZodTypes): schema is ZodArray<any> =>
-  schema._def.typeName === ZodFirstPartyTypeKind.ZodArray;
 
 export type RenderedElement =
   | JSX.Element
